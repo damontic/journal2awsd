@@ -75,27 +75,25 @@ func journal2awsd(dryRun *bool, eventSize *int, logGroup, logStream *string) {
 		if counter == *eventSize-1 {
 			counter = 0
 			if !*dryRun {
-				nextToken = sendEventsCloudwatch(events, logGroup, logStream, nextToken, cloudwatchlogsClient)
+				nextToken, err = sendEventsCloudwatch(events, logGroup, logStream, nextToken, cloudwatchlogsClient)
+				if err != nil {
+					firstErrorLine := strings.Split(err.Error(), "\n")[0]
+					splittedError := strings.Split(firstErrorLine, " ")
+					nextToken, err = sendEventsCloudwatch(events, logGroup, logStream, &splittedError[len(splittedError)-1], cloudwatchlogsClient)
+					if err != nil {
+						log.Fatalf("%v", err)
+					}
+				}
+			} else {
+				sendEventsConsole(events)
 			}
 		}
-		sendEventsConsole(events)
 		counter++
 	}
 	cmd.Wait()
 }
 
-func sendEventsCloudwatch(events []*cloudwatchlogs.InputLogEvent, logGroupName *string, logStreamName *string, nextToken *string, cloudwatchlogsClient *cloudwatchlogs.CloudWatchLogs) *string {
-
-	if *nextToken == "" {
-		describeLogStreamsInput := &cloudwatchlogs.DescribeLogStreamsInput{
-			LogGroupName: logGroupName,
-		}
-		describeLogStreamsOutput, err := cloudwatchlogsClient.DescribeLogStreams(describeLogStreamsInput)
-		if err != nil {
-			log.Fatalf("Error in DescribeLogStreams\n%v", err)
-		}
-		nextToken = describeLogStreamsOutput.NextToken
-	}
+func sendEventsCloudwatch(events []*cloudwatchlogs.InputLogEvent, logGroupName *string, logStreamName *string, nextToken *string, cloudwatchlogsClient *cloudwatchlogs.CloudWatchLogs) (*string, error) {
 
 	putLogEventInput := &cloudwatchlogs.PutLogEventsInput{
 		LogEvents:     events,
@@ -104,11 +102,7 @@ func sendEventsCloudwatch(events []*cloudwatchlogs.InputLogEvent, logGroupName *
 		SequenceToken: nextToken,
 	}
 	putLogEventsOutput, err := cloudwatchlogsClient.PutLogEvents(putLogEventInput)
-	if err != nil {
-		log.Fatalf("Error in PutLogEvents\n%v", err)
-	}
-
-	return putLogEventsOutput.NextSequenceToken
+	return putLogEventsOutput.NextSequenceToken, err
 }
 
 func sendEventsConsole(events []*cloudwatchlogs.InputLogEvent) {
