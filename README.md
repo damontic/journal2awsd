@@ -7,6 +7,22 @@ This was tested in:
 
 The process executes `journalctl` and sends to Cloudwatch logs events every 10 new lines.
 
+# Usage
+```bash
+$ journal2awsd -h
+Usage of journal2awsd:
+  -dry-run
+    	Set if you want to output messages to console. Useful for testing.
+  -group string
+    	Specify the log group where you want to send the logs
+  -size int
+    	Specify the number of events to send to AWS Cloudwatch. (default 10)
+  -stream string
+    	Specify the log stream where you want to send the logs
+  -version
+    	Set if you want to see the version and exit.
+```
+
 # Run as a service
 Two systemd unit files are provided.
 
