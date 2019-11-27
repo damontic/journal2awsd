@@ -7,9 +7,9 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/cloudwatchlogs"
@@ -95,6 +95,8 @@ func journal2awsd(dryRun *bool, eventSize *int, logGroup, logStream *string) {
 
 func sendEventsCloudwatch(events []*cloudwatchlogs.InputLogEvent, logGroupName *string, logStreamName *string, nextToken *string, cloudwatchlogsClient *cloudwatchlogs.CloudWatchLogs) (*string, error) {
 
+	sort.Sort(ByTimestamp(events))
+
 	putLogEventInput := &cloudwatchlogs.PutLogEventsInput{
 		LogEvents:     events,
 		LogGroupName:  logGroupName,
@@ -110,16 +112,20 @@ func sendEventsConsole(events []*cloudwatchlogs.InputLogEvent) {
 }
 
 func getMessageTimestamp(m string) (string, int64) {
-	splittedMessage := strings.Split(m, " ")
-	timestamp := strings.Split(splittedMessage[0], ".")
+	secondsPart := m[:10]
+	millisecondsPart := m[11:14]
+	millisecondsString := secondsPart + millisecondsPart
 
-	timestampNum, err := strconv.ParseInt(timestamp[0], 10, 64)
+	milliseconds, err := strconv.ParseInt(millisecondsString, 10, 64)
 	if err != nil {
-		log.Fatalf("Error in getMessageTimestamp\n%v\nMessage: %s\ntimestamp: %s\n", m, timestamp[0], err)
+		log.Fatalf("Error in getMessageTimestamp\n%v\nMessage: %s\ntimestamp: %s\n", m, millisecondsString, err)
 	}
 
-	t := time.Unix(timestampNum, 0)
-
-	message := strings.Join(splittedMessage[1:], " ")
-	return message, t.Unix()
+	return m[18:], milliseconds
 }
+
+type ByTimestamp []*cloudwatchlogs.InputLogEvent
+
+func (a ByTimestamp) Len() int           { return len(a) }
+func (a ByTimestamp) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a ByTimestamp) Less(i, j int) bool { return *a[i].Timestamp < *a[j].Timestamp }
