@@ -16,16 +16,28 @@ import (
 )
 
 func main() {
+	version := "0.0.0"
 
+	versionFlag := flag.Bool("version", false, "Set if you want to see the version and exit.")
 	dryRun := flag.Bool("dry-run", false, "Set if you want to output messages to console. Useful for testing.")
-	logGroup := flag.String("log-group", "", "Specify the log group where you want to send the logs")
-	logStream := flag.String("log-stream", "", "Specify the log stream where you want to send the logs")
+	logGroup := flag.String("group", "", "Specify the log group where you want to send the logs")
+	logStream := flag.String("stream", "", "Specify the log stream where you want to send the logs")
+	eventSize := flag.Int("size", 10, "Specify the number of events to send to AWS Cloudwatch.")
 	flag.Parse()
+
+	if *versionFlag {
+		fmt.Println(version)
+		os.Exit(0)
+	}
 
 	if !*dryRun && (*logGroup == "" || *logStream == "") {
 		log.Fatalf("You must specify both the log group and the log stream.\nCurrent logGroup: %s\nCurrent logStream: %s\nSee %s -h for help.", *logGroup, *logStream, os.Args[0])
 	}
 
+	journal2awsd(dryRun, eventSize, logGroup, logStream)
+}
+
+func journal2awsd(dryRun *bool, eventSize *int, logGroup, logStream *string) {
 	cmd := exec.Command("journalctl", "-f", "--no-pager", "-o", "short-unix")
 
 	pipe, err := cmd.StdoutPipe()
@@ -42,7 +54,7 @@ func main() {
 	cloudwatchlogsClient := cloudwatchlogs.New(mySession)
 
 	var counter = 0
-	var events = make([]*cloudwatchlogs.InputLogEvent, 10)
+	var events = make([]*cloudwatchlogs.InputLogEvent, *eventSize)
 
 	scanner := bufio.NewScanner(pipe)
 	scanner.Split(bufio.ScanLines)
@@ -59,7 +71,7 @@ func main() {
 			Message:   &message,
 			Timestamp: &timestamp,
 		}
-		if counter == 9 {
+		if counter == *eventSize-1 {
 			counter = 0
 			if !*dryRun {
 				sendEventsCloudwatch(events, logGroup, logStream, cloudwatchlogsClient)

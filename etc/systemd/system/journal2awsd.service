@@ -1,0 +1,9 @@
+[Unit]
+Description=Send Journal to AWS Cloudwatch Logs
+DefaultDependencies=no
+Requires=systemd-journald.service
+After=systemd-journald.service systemd-remount-fs.service
+
+[Service]
+ExecStart=journal2awsd -group EC2-systemd-journal -stream %H
+Type=simple

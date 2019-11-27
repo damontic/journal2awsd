@@ -1,0 +1,9 @@
+[Unit]
+Description=Send Journal to Output
+DefaultDependencies=no
+Requires=systemd-journald.service
+After=systemd-journald.service systemd-remount-fs.service
+
+[Service]
+ExecStart=journal2awsd -dry-run
+Type=simple
