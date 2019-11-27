@@ -38,6 +38,9 @@ func main() {
 }
 
 func journal2awsd(dryRun *bool, eventSize *int, logGroup, logStream *string) {
+	mySession := session.Must(session.NewSession())
+	cloudwatchlogsClient := cloudwatchlogs.New(mySession)
+
 	cmd := exec.Command("journalctl", "-f", "--no-pager", "-o", "short-unix")
 
 	pipe, err := cmd.StdoutPipe()
@@ -50,11 +53,9 @@ func journal2awsd(dryRun *bool, eventSize *int, logGroup, logStream *string) {
 		log.Fatalf("Error in Start\n%v", err)
 	}
 
-	mySession := session.Must(session.NewSession())
-	cloudwatchlogsClient := cloudwatchlogs.New(mySession)
-
 	var counter = 0
 	var events = make([]*cloudwatchlogs.InputLogEvent, *eventSize)
+	var nextToken *string
 
 	scanner := bufio.NewScanner(pipe)
 	scanner.Split(bufio.ScanLines)
@@ -74,7 +75,7 @@ func journal2awsd(dryRun *bool, eventSize *int, logGroup, logStream *string) {
 		if counter == *eventSize-1 {
 			counter = 0
 			if !*dryRun {
-				sendEventsCloudwatch(events, logGroup, logStream, cloudwatchlogsClient)
+				nextToken = sendEventsCloudwatch(events, logGroup, logStream, nextToken, cloudwatchlogsClient)
 			}
 		}
 		sendEventsConsole(events)
@@ -83,16 +84,31 @@ func journal2awsd(dryRun *bool, eventSize *int, logGroup, logStream *string) {
 	cmd.Wait()
 }
 
-func sendEventsCloudwatch(events []*cloudwatchlogs.InputLogEvent, logGroupName *string, logStreamName *string, cloudwatchlogsClient *cloudwatchlogs.CloudWatchLogs) {
+func sendEventsCloudwatch(events []*cloudwatchlogs.InputLogEvent, logGroupName *string, logStreamName *string, nextToken *string, cloudwatchlogsClient *cloudwatchlogs.CloudWatchLogs) *string {
+
+	if *nextToken == "" {
+		describeLogStreamsInput := &cloudwatchlogs.DescribeLogStreamsInput{
+			LogGroupName: logGroupName,
+		}
+		describeLogStreamsOutput, err := cloudwatchlogsClient.DescribeLogStreams(describeLogStreamsInput)
+		if err != nil {
+			log.Fatalf("Error in DescribeLogStreams\n%v", err)
+		}
+		nextToken = describeLogStreamsOutput.NextToken
+	}
+
 	putLogEventInput := &cloudwatchlogs.PutLogEventsInput{
 		LogEvents:     events,
 		LogGroupName:  logGroupName,
 		LogStreamName: logStreamName,
+		SequenceToken: nextToken,
 	}
-	_, err := cloudwatchlogsClient.PutLogEvents(putLogEventInput)
+	putLogEventsOutput, err := cloudwatchlogsClient.PutLogEvents(putLogEventInput)
 	if err != nil {
-		log.Fatalf("Error in sendEventsCloudwatch\n%v", err)
+		log.Fatalf("Error in PutLogEvents\n%v", err)
 	}
+
+	return putLogEventsOutput.NextSequenceToken
 }
 
 func sendEventsConsole(events []*cloudwatchlogs.InputLogEvent) {
