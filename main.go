@@ -62,7 +62,7 @@ func journal2awsd(dryRun *bool, eventSize *int, logGroup, logStream *string) {
 	for scanner.Scan() {
 		m := scanner.Text()
 
-		if m[0] == '-' {
+		if m[0] == '-' || m[0] == ' ' {
 			continue
 		}
 
