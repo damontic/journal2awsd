@@ -66,7 +66,10 @@ func journal2awsd(dryRun *bool, eventSize *int, logGroup, logStream *string) {
 			continue
 		}
 
-		message, timestamp := getMessageTimestamp(m)
+		message, timestamp, err := getMessageTimestamp(m)
+		if err != nil {
+			continue
+		}
 
 		events[counter] = &cloudwatchlogs.InputLogEvent{
 			Message:   &message,
@@ -111,17 +114,19 @@ func sendEventsConsole(events []*cloudwatchlogs.InputLogEvent) {
 	fmt.Printf("%v\n", events)
 }
 
-func getMessageTimestamp(m string) (string, int64) {
+func getMessageTimestamp(m string) (string, int64, error) {
+	var err error
 	secondsPart := m[:10]
 	millisecondsPart := m[11:14]
 	millisecondsString := secondsPart + millisecondsPart
 
 	milliseconds, err := strconv.ParseInt(millisecondsString, 10, 64)
 	if err != nil {
-		log.Fatalf("Error in getMessageTimestamp\n%v\nMessage: %s\ntimestamp: %s\n", m, millisecondsString, err)
+		log.Printf("Error in getMessageTimestamp\n%v\nMessage: %s\ntimestamp: %s\n", m, millisecondsString, err)
+		err = fmt.Errorf("The string message %s cannot be processed as a timestamp.", m)
 	}
 
-	return m[18:], milliseconds
+	return m[18:], milliseconds, err
 }
 
 type ByTimestamp []*cloudwatchlogs.InputLogEvent
